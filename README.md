@@ -1,2 +1,2 @@
-# course-qt
+# COURSE RUST FRONTEND
 Course NC - QT
