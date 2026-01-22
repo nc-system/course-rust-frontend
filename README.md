@@ -1,2 +1,2 @@
 # COURSE RUST FRONTEND
-Course NC - QT
+Course NC - Rust Frontend
