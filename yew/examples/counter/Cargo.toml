@@ -1,0 +1,9 @@
+[package]
+name = "counter"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+gloo = "0.11"
+js-sys = "0.3.82"
+yew = { version = "0.21", features = ["csr"] }
