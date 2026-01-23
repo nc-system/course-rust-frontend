@@ -1,0 +1,9 @@
+[package]
+name = "download_progress"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+futures = "0.3.31"
+iced = "0.14.0"
+reqwest = "0.13.1"
