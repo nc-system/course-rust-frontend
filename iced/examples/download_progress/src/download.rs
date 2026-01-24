@@ -1,11 +1,8 @@
 
-use iced::{Subscription};
+use iced::Subscription;
 use iced::futures::{self, StreamExt};
 use futures::stream::BoxStream;
 use std::sync::Arc;
-
-// 👇 IMPORTAR Message desde app.rs
-use crate::app::Message;
 
 
 #[derive(Debug, Clone)]
@@ -19,6 +16,12 @@ pub enum Error {
     NoContentLength,
 }
 
+#[derive(Debug, Clone)]
+pub enum Message {
+    DownloadProgress(Progress),
+    DownloadFinished(Result<(), Error>),
+}
+
 impl From<reqwest::Error> for Error {
     fn from(error: reqwest::Error) -> Self {
         Error::RequestFailed(Arc::new(error))
@@ -30,9 +33,9 @@ impl From<reqwest::Error> for Error {
 pub fn download_subscription(
     url: String,
 ) -> Subscription<Message> {
-    Subscription::run(
-        std::any::TypeId::of::<Download>(),
-        move || download_stream(url.clone()),
+    Subscription::run_with(
+        url.clone(),
+        move |url| download_stream(url.clone()),
     )
 }
 
@@ -42,15 +45,16 @@ fn download_stream(
     url: String,
 ) -> BoxStream<'static, Message> {
     futures::stream::unfold(
-        (url, None, 0usize),
-        |(url, mut response, mut downloaded)| async move {
-            if response.is_none() {
-                let resp = match reqwest::get(&url).await {
+        (url, None::<reqwest::Client>, None::<(reqwest::Response, u64)>, 0usize),
+        |(url, _, mut response_data, mut downloaded)| async move {
+            if response_data.is_none() {
+                let client = reqwest::Client::new();
+                let resp = match client.get(&url).send().await {
                     Ok(r) => r,
                     Err(e) => {
                         return Some((
-                            Message::DownloadFinished(Err(e.into())),
-                            (url, None, downloaded),
+                            Message::DownloadFinished(Err(Error::RequestFailed(Arc::new(e)))),
+                            (url, None, None, downloaded),
                         ));
                     }
                 };
@@ -60,36 +64,36 @@ fn download_stream(
                     None => {
                         return Some((
                             Message::DownloadFinished(Err(Error::NoContentLength)),
-                            (url, None, downloaded),
+                            (url, None, None, downloaded),
                         ));
                     }
                 };
 
                 return Some((
                     Message::DownloadProgress(Progress { percent: 0.0 }),
-                    (url, Some((resp.bytes_stream(), total)), downloaded),
+                    (url, None, Some((resp, total)), downloaded),
                 ));
             }
 
-            let (mut stream, total) = response.take().unwrap();
+            let (mut resp, total) = response_data.take().unwrap();
 
-            match stream.next().await {
-                Some(Ok(bytes)) => {
+            match resp.chunk().await {
+                Ok(Some(bytes)) => {
                     downloaded += bytes.len();
                     let percent = 100.0 * downloaded as f32 / total as f32;
 
                     Some((
                         Message::DownloadProgress(Progress { percent }),
-                        (url, Some((stream, total)), downloaded),
+                        (url, None, Some((resp, total)), downloaded),
                     ))
                 }
-                Some(Err(e)) => Some((
-                    Message::DownloadFinished(Err(e.into())),
-                    (url, None, downloaded),
-                )),
-                None => Some((
+                Ok(None) => Some((
                     Message::DownloadFinished(Ok(())),
-                    (url, None, downloaded),
+                    (url, None, None, downloaded),
+                )),
+                Err(e) => Some((
+                    Message::DownloadFinished(Err(Error::RequestFailed(Arc::new(e)))),
+                    (url, None, None, downloaded),
                 )),
             }
         },

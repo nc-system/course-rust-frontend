@@ -1,5 +1,3 @@
-use iced::{Application, Subscription};
-
 use crate::download;
 
 #[derive(Debug, Clone)]
